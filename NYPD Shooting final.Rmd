@@ -1,0 +1,215 @@
+---
+title: "NY Shooting"
+author: "Mauricio Molina-Delgado"
+date: "8/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Data and libraries
+
+Data for this project correspond to the dataset entitled NYPD Shooting Incident Data (Historic) and were taken from the page <https://catalog.data.gov/dataset>.
+
+The 'tidyverse' and 'lubridate' libraries were used for data preparation and cleaning.
+ 
+
+```{r read_data}
+library("tidyverse")
+library("lubridate")
+
+read.csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")->datos
+
+summary(datos)
+```
+
+## Data preparation
+The variables that would be used in the analyzes were selected and the appropriate transformations were carried out to treat them.
+
+Missing data were also declared. Blank data, as well as some nonsense values in the variable of the age groups of the perpetrators, were considered missing.  Missing values were excluded for the analysis of each variable.
+ 
+
+```{r Limpieza}
+datos%>%select(-c(X_COORD_CD:Lon_Lat))%>%select(-c(INCIDENT_KEY, PRECINCT,JURISDICTION_CODE))->datos
+
+datos%>%mutate(OCCUR_DATE=mdy(OCCUR_DATE))%>%mutate(OCCUR_TIME=hms(OCCUR_TIME))->datos
+
+
+datos%>%mutate(PERP_SEX= na_if(PERP_SEX,""), LOCATION_DESC=na_if(LOCATION_DESC,""), PERP_AGE_GROUP=na_if(PERP_AGE_GROUP,""), PERP_RACE=na_if(PERP_RACE,""))->datos
+datos%>%mutate(PERP_AGE_GROUP =na_if(PERP_AGE_GROUP,1020))%>%mutate(PERP_AGE_GROUP =na_if(PERP_AGE_GROUP,224))%>%mutate(PERP_AGE_GROUP =na_if(PERP_AGE_GROUP,940))->datos
+
+
+datos%>%mutate(BORO=factor(BORO))%>%mutate(STATISTICAL_MURDER_FLAG=factor(STATISTICAL_MURDER_FLAG))%>%mutate(PERP_AGE_GROUP=factor(PERP_AGE_GROUP))%>%mutate(PERP_SEX=factor(PERP_SEX))%>%mutate(PERP_RACE=factor(PERP_RACE), VIC_AGE_GROUP=factor(VIC_AGE_GROUP),VIC_SEX=factor(VIC_SEX), VIC_RACE=factor(VIC_RACE))->datos
+datos<-datos%>%mutate(LOCATION_DESC=factor(LOCATION_DESC))
+
+summary(datos)
+```
+
+## Perpatrator and victim gender
+
+Tables 1 and 2 show that the vast majority of victims as well as perpetrators are men, although the percentage of female victims is higher (9.34% compared to 2.13%).
+
+Table 3 shows that the gender of the perpetrators has a similar structure regardless of whether the victims are men or women.
+
+```{r crosstab sex}
+#Table 1. Perpetrator gender
+100*round(table(datos$PERP_SEX)/sum(table(datos$PERP_SEX)),4)->a
+names(a)<-c("Women","Men","Unknown")
+as.data.frame(a)->a
+colnames(a)<-c("Perpetrator Gender","Freq")
+a
+
+#Table 2. Victim Gender
+100*round(table(datos$VIC_SEX)/sum(table(datos$VIC_SEX)),4)->b
+names(b)<-c("Women","Men","Unknown")
+as.data.frame(b)->b
+colnames(b)<-c("Victim Gender","Freq")
+b
+
+#Table 3 Crosstab Perpetrator vs Victim Gender
+table(datos$PERP_SEX, datos$VIC_SEX,dnn=c("Perp. Gender", "Victim Gender"))->t1
+apply(t1,1, sum)->total
+cbind(t1,total)->t1
+
+
+t1<-round(prop.table(t1,2)*100,2)
+colnames(t1)<-c("Victim:Women","Victim:Men","Victim:Unknown","Total")
+rownames(t1)<-c("Perp:Women","Perp:Men","Perp:Unknown")
+as.data.frame(rbind(t1,apply(t1,2,sum)))
+
+```
+
+
+
+## Perpetrator and victim race
+The most frequent race in the victims and even more so in the aggressors was Afro-American (Tables 4 and 5). In both cases, the second most frequent group is that of white Hispanics. In the case of white victims and aggressors, the percentage is quite low (less than 3% in both). One problem with these results is that they depend on the total population of each of the groups, so it would be better to estimate the rate for each of the racial groups and thus estimate the corresponding risks.
+
+An interesting result is that in the case of victims in the African-American population, the percentage of aggressors in that same group is very high (almost 76%), but when the victims are white, the percentage of African-American aggressors is relatively low ( about 34%) and almost as high as that of white attacks (about 31%)
+```{r crosstab race}
+
+#Table 4. Perpetrator race
+100*round(table(datos$PERP_RACE)/sum(table(datos$PERP_RACE)),4)->a2
+names(a2)<-c("AMERICAN INDIAN/ALASKAN NATIVE","ASIAN/PACIFIC ISLANDER",
+"BLACK","BLACK HISPANIC","UNKNOWN","WHITE","WHITE HISPANIC")
+as.data.frame(a2)->a2
+colnames(a2)<-c("Perpetrator Race","Freq")
+a2
+
+#Table 5. Victim Race
+100*round(table(datos$VIC_RACE)/sum(table(datos$VIC_RACE)),4)->b2
+names(b2)<-c("AMERICAN INDIAN/ALASKAN NATIVE","ASIAN/PACIFIC ISLANDER",
+"BLACK","BLACK HISPANIC","UNKNOWN","WHITE","WHITE HISPANIC")
+as.data.frame(b2)->b2
+colnames(b2)<-c("Victim Race","Freq")
+b2
+
+
+#Table 6. Crosstab Perpetrator vs Victim Race
+table(datos$PERP_RACE, datos$VIC_RACE,dnn=c("Perp. race", "Victim race"))->t2
+apply(t2,1, sum)->tot
+cbind(t2,tot)->t2
+
+t2<-round(prop.table(t2,2)*100,2)
+colnames(t2)<-c("Victim:AMERICAN INDIAN/ALASKAN NATIVE","Victim:ASIAN/PACIFIC ISLANDER",
+"Victim:BLACK","Victim:BLACK HISPANIC","Victim:UNKNOWN","Victim:WHITE","Victim:WHITE HISPANIC","TOTAL")
+rownames(t2)<-c("Victim:AMERICAN INDIAN/ALASKAN NATIVE","Victim:ASIAN/PACIFIC ISLANDER",
+"Victim:BLACK","Victim:BLACK HISPANIC","Victim:UNKNOWN","Victim:WHITE","Victim:WHITE HISPANIC")
+
+as.data.frame(rbind(t2,apply(t2,2,sum)))
+
+```
+
+## Perpetrator and victim age
+Approximately 67% of the aggressors correspond to the age group of 18-44 years old (Table 7), while approximately 82% of the victims correspond to the same age group (Table 8). Although the aggressors tend to concentrate in this group, when the victims are teenagers or when they are over 65 years of age, there is a significant increase in the proportion of aggressors in the same age group as the victims (Table 9).
+
+```{r crosstab age}
+
+#Table 7. Perpetrator age
+100*round(table(datos$PERP_AGE_GROUP)/sum(table(datos$PERP_AGE_GROUP)),4)->a3
+names(a3)<-c("<18 years", "18-24 years", "25-44 years", "45-64", "65+ years","Unknown")
+as.data.frame(a3)->a3
+colnames(a3)<-c("Perpetrator Age","Freq")
+a3
+#Table 8. Victim age
+100*round(table(datos$VIC_AGE_GROUP)/sum(table(datos$VIC_AGE_GROUP)),4)->a4
+names(a4)<-c("<18 years", "18-24 years", "25-44 years", "45-64", "65+ years","Unknown")
+as.data.frame(a4)->a4
+colnames(a4)<-c("Victim Age","Freq")
+a4
+
+#Table 9. Crosstab Perpetrator vs Victim age
+
+table(datos$PERP_AGE_GROUP, datos$VIC_AGE_GROUP,dnn=c("Perp. age", "Victim age"))->t3
+apply(t3,1, sum)->to
+cbind(t3,to)->t3
+colnames(t3)<-c("Victim: <18 years", "Victim: 18-24 years", "Victim: 25-44 years", "Victim: 45-64", "Victim: 65+ years","Victim: Unknown", "Victim: Total")
+rownames(t3)<-c("Perp: <18 years", "Perp: 18-24 years", "Perp: 25-44 years", "Perp: 45-64", "Perp: 65+ years","Perp: Unknown")
+
+t3<-round(prop.table(t3,2)*100,2)
+as.data.frame(rbind(t3,apply(t3,2,sum)))
+
+```
+## Incidents per Borough
+Table 10 shows the number of shooting incidents during the period in each of the New York boroughs as well as the percentage of those incidents that involved a murder. In all boroughs between 17% and 21% of incidents resulted in a murder. The highest incidence of shooting situations occurred in the Bronx (24.66 per 10,000 inhabitants) while the lowest occurred in Staten Island (7.63 per 10,000 inhs.
+
+
+```{r Zone}
+cbind.data.frame(c(4460101,4970026,912458,3123068,2717758),c("QUEENS","BROOKLYN","STATEN ISLAND","MANHATTAN","BRONX"))->pop
+names(pop)<-c("population","BORO")
+pop
+
+datos%>%group_by(BORO)%>%summarize(murder=100*round(mean(STATISTICAL_MURDER_FLAG=="true"),4), Incidents=n() ) %>% select(BORO, murder,Incidents)->zona
+
+zona%>%full_join(pop)%>%mutate(shooting_per_10000hab=round(10000*Incidents/population,2))->zona
+zona
+```
+## Time and date
+
+Graph 1 shows that the majority of shooting incidents occur after 8:00 p.m. and before 5:00 a.m. Graph 2 shows that the number of incidents showed a decrease since 2011 but in 2020 there was an increase in cases.
+
+```{r Time}
+
+#Graph 1. Incidents per hour
+datos%>%group_by(hour(OCCUR_TIME))%>%summarize(cases=n())->hora
+hora%>%ggplot(aes(x=`hour(OCCUR_TIME)`,y=cases))+geom_line(aes(color="red"))
+
+#Graph 2. Incidents per year  
+datos%>%group_by(year(OCCUR_DATE))%>%summarize(cases=n())->anho
+anho%>%ggplot(aes(x=`year(OCCUR_DATE)` ,y=cases))+geom_line(aes(color="red"))
+
+
+
+```
+# Model for murder
+
+A logistic regression model was conducted with the dependent variable indicating the presence of murder in the incident.
+Significant effects were found for victim and offender age groups, but not for racial groups.
+
+
+
+```{r model}
+mod<-glm(STATISTICAL_MURDER_FLAG~PERP_SEX+PERP_AGE_GROUP+PERP_RACE+VIC_AGE_GROUP+VIC_SEX+VIC_RACE, family=binomial,datos)
+summary(mod)
+```
+
+
+
+##Conclusion
+
+The analyzes show a series of patterns on the characteristics of offenders and victims, in both groups there is a much greater presence of men, in terms of gender, and of African Americans and Hispanics, in terms of race.
+
+The number of white victims is quite low and in these cases the offenders are similarly distributed between African-Americans and Hispanics.
+
+In the case of race and gender, it is necessary to take care of possible sources of bias. I particularly identify my possible tendency to exaggerate the attacks of white people against minorities and gender violence. For this reason, to question my possible bias, I made crosses that would show the frequency of these situations. It must be recognized that in quantitative terms the situations between men and between Afro-Americans or Hispanics are more important. This does not mean that racial hate and gender violence are major social problems, but this result helps to measure the magnitude of other situations of violence
+
+
+A higher concentration of victims and offenders was also found between the ages of 25 and 44, but when the victims were teen-agers, a significant number of offenders were found in that same group. Something similar occurs for victims over 65 years of age. It was also found that when the offenders belonged to the age group between 25 and 44, the probability that the incident involved murder increased.
+
+Finally, trends were found in the time at which attacks usually occur (night and early morning) and an increase in the number of shooting incidents was identified in 2021, which contrasts with a important decrease in the previous period.
+
+
+```{r Sesion_Info}
+sessionInfo()
+```
